@@ -3,6 +3,7 @@
 // Push START to initiate coutdown timer
 // Press the RESET button if you want to reset before the time has completed
 // At the end of the timer, display will show "0" and alarms will begin
+// In this version the LIGHT will blink
 // Press RESET button to turn off alarms and reset timer to previous start time 
 // Clock comes from the DS3231 RTC
 // To view the clock, swith over to "Clock Mode"
@@ -18,6 +19,8 @@ RTC_DS3231 rtc;  //I2C address is 0x68
 
 char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 
+//#include <AsyncDelay.h>
+//AsyncDelay delay_1s; //1 second dely for the light blink
 
 // Define pin connections
 #define UP_BUTTON 8
@@ -32,11 +35,12 @@ char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursd
 int addr1 = 0x20;  // PCF8574 device 1
 int addr2 = 0x21;  // PCF8574 device 2
 int timeToDisplay; // the time that should be displayed on the timer
+int blank = 2;     // input switch to blank display when low. Handy for hardware setup
 int timerDuration; // used to keep track of the user's desired timer length
-int blank = 2;
 bool isTimerRunning; //used to track whether or not the timer is counting down
 
 unsigned long milsWhenTimerStarted; //used to keep track of when a timer started
+
 
 void setup() {
   
@@ -71,7 +75,11 @@ void setup() {
   // January 21, 2014 at 3am you would call:
   //rtc.adjust(DateTime(2022, 11, 21, 15, 38, 0));
 
+
+//  // Start counting for the light blink
+//  delay_1s.start(1000, AsyncDelay::MILLIS); //set the time it takes to delay 1000 is 1 second
  
+  pinMode(blank, INPUT_PULLUP);  // use digital pin to GND to blank display
   pinMode(UP_BUTTON, INPUT_PULLUP);
   pinMode(DOWN_BUTTON, INPUT_PULLUP);
   pinMode(START_BUTTON, INPUT_PULLUP);
@@ -147,16 +155,16 @@ void loop() {
   Serial.print("Temperature: ");
   Serial.print(rtc.getTemperature());
   Serial.println(" C");
+  
 
-
-  if(digitalRead(CLOCK_SWITCH) == HIGH)
+  if(digitalRead(CLOCK_SWITCH) == LOW)
   {
     NixieClock(); 
   }
   else{
     if(isTimerRunning == false){
       ShowTime(timerDuration);
-      HandleUserInputTimerStopped();
+      HandleUserInput_TimerStopped();
     }
     else{
       ShowTime(timeToDisplay);
@@ -186,7 +194,7 @@ void HandleTimerCountdown()
   }
 }
 
-void HandleUserInputTimerStopped(){
+void HandleUserInput_TimerStopped(){
   //user pressed up button
     if (digitalRead(UP_BUTTON) ==  LOW){
       IncreaseTimerDuration();
@@ -226,7 +234,7 @@ void NixieClock(){
   }
 
   Serial.println();
-  delay(500);
+  delay(1000);
  }
 
 void IncreaseTimerDuration()
@@ -252,14 +260,22 @@ void DecreaseTimerDuration()
 }
 
 void TriggerAlarm(){
-    if (isTimerRunning == true){
     digitalWrite(BUZZER, HIGH);
     digitalWrite(LIGHT, HIGH);
-     }
-}
+    isTimerRunning = false;
+//  //This if statement should make the light blink
+//  if (delay_1s.isExpired()) {
+//      digitalWrite(LIGHT, HIGH) ;
+//      delay_1s.repeat(); // Count from when the delay expired, not now
+         }     
+
+
 
 void Reset(){
 // if the RESET button is pressed, stop alarms and go back to last time set on timer
+    //turn off buzzer and light
+    //timeToDisplay = timerDuration;
+    //milsWhenTimerStarted = millis();
     digitalWrite(BUZZER, LOW);
     digitalWrite(LIGHT, LOW); 
     isTimerRunning = false;
@@ -297,7 +313,7 @@ void nixiePrint(int number, bool blanking) {
   hund = (number / 100) % 10; // digit can be found, etc.
   thou = (number / 1000) % 10;
 
-  // blank leading zeroes for numbers by setting Nixie driver DCBA INPUT_PULLUPs to "1111"
+  // blank leading zeroes for numbers by setting Nixie driver DCBA inputs to "1111"
   // e.g. instead of displaying "0049", just display "49" with the left digits turned off
   if (number < 10) {        // if we only have one digit, blank the tens
     tens = 0xFF;
@@ -321,7 +337,7 @@ void nixiePrint(int number, bool blanking) {
   lsb = (ones << 4) | (0x0F & tens); // place "tens" in lower 4 bits and "ones" in upper 4 bits of LSB data
   msb = (hund << 4) | (0x0F & thou); // place "thou" in lower 4 bits and "hund" in upper 4 bits of MSB data
 
-  // if the display is blanked, force all 1's to the Nixie control INPUT_PULLUPs
+  // if the display is blanked, force all 1's to the Nixie control inputs
   // to disable all outputs on compatible BCD drivers.  If the driver does
   // not support blanking, the datasheet will detail the display behaviour
   // for an input of DCBA = 1111
